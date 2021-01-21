@@ -1,5 +1,6 @@
 /*
  * Copyright 2014 Kalpesh Parmar
+ * Copyright 2019 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +17,7 @@
 
 package org.bitcoinj.store;
 
+import org.bitcoinj.core.Address;
 import org.bitcoinj.core.NetworkParameters;
 
 import java.util.ArrayList;
@@ -24,7 +26,7 @@ import java.util.List;
 
 /**
  * <p>A full pruned block store using the MySQL database engine. As an added bonus an address index is calculated,
- * so you can use {@link #calculateBalanceForAddress(org.bitcoinj.core.Address)} to quickly look up
+ * so you can use {@link #calculateBalanceForAddress(Address)} to quickly look up
  * the quantity of bitcoins controlled by that address.</p>
  */
 public class MySQLFullPrunedBlockStore extends DatabaseFullPrunedBlockStore {
@@ -62,7 +64,7 @@ public class MySQLFullPrunedBlockStore extends DatabaseFullPrunedBlockStore {
             "    height integer NOT NULL,\n" +
             "    value bigint NOT NULL,\n" +
             "    scriptbytes mediumblob NOT NULL,\n" +
-            "    toaddress varchar(35),\n" +
+            "    toaddress varchar(74),\n" +
             "    addresstargetable tinyint(1),\n" +
             "    coinbase boolean,\n" +
             "    CONSTRAINT openoutputs_pk PRIMARY KEY (hash, `index`) USING BTREE \n" +

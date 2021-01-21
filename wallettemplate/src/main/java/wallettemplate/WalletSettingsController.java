@@ -30,7 +30,7 @@ import javafx.scene.control.DatePicker;
 import javafx.scene.control.TextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.spongycastle.crypto.params.KeyParameter;
+import org.bouncycastle.crypto.params.KeyParameter;
 import wallettemplate.utils.TextFieldValidator;
 
 import javax.annotation.Nullable;
@@ -66,7 +66,7 @@ public class WalletSettingsController {
             if (seed.isEncrypted()) {
                 log.info("Wallet is encrypted, requesting password first.");
                 // Delay execution of this until after we've finished initialising this screen.
-                Platform.runLater(() -> askForPasswordAndRetry());
+                Platform.runLater(this::askForPasswordAndRetry);
                 return;
             }
         } else {

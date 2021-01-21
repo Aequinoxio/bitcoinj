@@ -27,7 +27,7 @@ import java.security.KeyStoreException;
 
 /**
  * An implementation of TrustStoreLoader handles fetching a KeyStore from the operating system, a file, etc. It's
- * necessary because the Java {@link java.security.KeyStore} abstraction is not completely seamless and for example
+ * necessary because the Java {@link KeyStore} abstraction is not completely seamless and for example
  * we sometimes need slightly different techniques to load the key store on different versions of Android, MacOS,
  * Windows, etc.
  */
@@ -56,9 +56,7 @@ public interface TrustStoreLoader {
                 }
             } catch (ClassNotFoundException e) {
                 // NOP. android.os.Build is not present, so we are not on Android. Fall through.
-            } catch (NoSuchFieldException e) {
-                throw new RuntimeException(e); // Should never happen.
-            } catch (IllegalAccessException e) {
+            } catch (NoSuchFieldException | IllegalAccessException e) {
                 throw new RuntimeException(e); // Should never happen.
             }
             if (keystorePath == null) {
@@ -84,9 +82,7 @@ public interface TrustStoreLoader {
                 KeyStore keystore = KeyStore.getInstance("AndroidCAStore");
                 keystore.load(null, null);
                 return keystore;
-            } catch (IOException x) {
-                throw new KeyStoreException(x);
-            } catch (GeneralSecurityException x) {
+            } catch (IOException | GeneralSecurityException x) {
                 throw new KeyStoreException(x);
             }
         }

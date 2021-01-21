@@ -19,6 +19,7 @@ package wallettemplate.controls;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.AddressFormatException;
 import org.bitcoinj.core.NetworkParameters;
+
 import javafx.scene.Node;
 import javafx.scene.control.TextField;
 import wallettemplate.utils.TextFieldValidator;
@@ -39,9 +40,7 @@ public class BitcoinAddressValidator {
         // the example/prompt address hard to read.
         new TextFieldValidator(field, text -> text.isEmpty() || testAddr(text));
         // However we do want the buttons to be disabled when empty so we apply a different test there.
-        field.textProperty().addListener((observableValue, prev, current) -> {
-            toggleButtons(current);
-        });
+        field.textProperty().addListener((observableValue, prev, current) -> toggleButtons(current));
         toggleButtons(field.getText());
     }
 
@@ -52,7 +51,7 @@ public class BitcoinAddressValidator {
 
     private boolean testAddr(String text) {
         try {
-            Address.fromBase58(params, text);
+            Address.fromString(params, text);
             return true;
         } catch (AddressFormatException e) {
             return false;

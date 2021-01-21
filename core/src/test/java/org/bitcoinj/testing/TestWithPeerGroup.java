@@ -22,6 +22,8 @@ import org.bitcoinj.core.*;
 import org.bitcoinj.net.*;
 import org.bitcoinj.store.*;
 import org.bitcoinj.utils.*;
+import org.junit.Rule;
+import org.junit.rules.Timeout;
 
 import java.net.*;
 import java.util.concurrent.*;
@@ -46,18 +48,23 @@ public class TestWithPeerGroup extends TestWithNetworkConnections {
         this.clientType = clientType;
     }
 
+    @Rule
+    public Timeout globalTimeout = Timeout.seconds(15);
+
     @Override
     public void setUp() throws Exception {
-        setUp(new MemoryBlockStore(PARAMS));
+        setUp(new MemoryBlockStore(UNITTEST));
     }
 
     @Override
     public void setUp(BlockStore blockStore) throws Exception {
         super.setUp(blockStore);
 
-        remoteVersionMessage = new VersionMessage(PARAMS, 1);
-        remoteVersionMessage.localServices = VersionMessage.NODE_NETWORK;
-        remoteVersionMessage.clientVersion = NotFoundMessage.MIN_PROTOCOL_VERSION;
+        remoteVersionMessage = new VersionMessage(UNITTEST, 1);
+        remoteVersionMessage.localServices =
+                VersionMessage.NODE_NETWORK | VersionMessage.NODE_BLOOM | VersionMessage.NODE_WITNESS;
+        remoteVersionMessage.clientVersion =
+                NetworkParameters.ProtocolVersion.WITNESS_VERSION.getBitcoinProtocolVersion();
         blockJobs = false;
         initPeerGroup();
     }
@@ -67,7 +74,6 @@ public class TestWithPeerGroup extends TestWithNetworkConnections {
         try {
             super.tearDown();
             blockJobs = false;
-            Utils.finishMockSleep();
             if (peerGroup.isRunning())
                 peerGroup.stopAsync();
         } catch (Exception e) {
@@ -89,7 +95,7 @@ public class TestWithPeerGroup extends TestWithNetworkConnections {
     protected final Semaphore jobBlocks = new Semaphore(0);
 
     private PeerGroup createPeerGroup(final ClientConnectionManager manager) {
-        return new PeerGroup(PARAMS, blockChain, manager) {
+        return new PeerGroup(UNITTEST, blockChain, manager) {
             @Override
             protected ListeningScheduledExecutorService createPrivateExecutor() {
                 return MoreExecutors.listeningDecorator(new ScheduledThreadPoolExecutor(1, new ContextPropagatingThreadFactory("PeerGroup test thread")) {
@@ -113,7 +119,7 @@ public class TestWithPeerGroup extends TestWithNetworkConnections {
 
     protected InboundMessageQueuer connectPeerWithoutVersionExchange(int id) throws Exception {
         Preconditions.checkArgument(id < PEER_SERVERS);
-        InetSocketAddress remoteAddress = new InetSocketAddress("127.0.0.1", 2000 + id);
+        InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getLoopbackAddress(), 2000 + id);
         Peer peer = peerGroup.connectTo(remoteAddress).getConnectionOpenFuture().get();
         InboundMessageQueuer writeTarget = newPeerWriteTargetQueue.take();
         writeTarget.peer = peer;

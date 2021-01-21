@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -57,8 +58,6 @@ public abstract class Message {
     protected boolean recached = false;
     protected MessageSerializer serializer;
 
-    protected int protocolVersion;
-
     protected NetworkParameters params;
 
     protected Message() {
@@ -67,7 +66,7 @@ public abstract class Message {
 
     protected Message(NetworkParameters params) {
         this.params = params;
-        serializer = params.getDefaultSerializer();
+        this.serializer = params.getDefaultSerializer();
     }
 
     protected Message(NetworkParameters params, byte[] payload, int offset, int protocolVersion) throws ProtocolException {
@@ -86,8 +85,7 @@ public abstract class Message {
      * @throws ProtocolException
      */
     protected Message(NetworkParameters params, byte[] payload, int offset, int protocolVersion, MessageSerializer serializer, int length) throws ProtocolException {
-        this.serializer = serializer;
-        this.protocolVersion = protocolVersion;
+        this.serializer = serializer.withProtocolVersion(protocolVersion);
         this.params = params;
         this.payload = payload;
         this.cursor = this.offset = offset;
@@ -120,13 +118,12 @@ public abstract class Message {
     }
 
     protected Message(NetworkParameters params, byte[] payload, int offset) throws ProtocolException {
-        this(params, payload, offset, params.getProtocolVersionNum(NetworkParameters.ProtocolVersion.CURRENT),
+        this(params, payload, offset, params.getDefaultSerializer().getProtocolVersion(),
              params.getDefaultSerializer(), UNKNOWN_LENGTH);
     }
 
     protected Message(NetworkParameters params, byte[] payload, int offset, MessageSerializer serializer, int length) throws ProtocolException {
-        this(params, payload, offset, params.getProtocolVersionNum(NetworkParameters.ProtocolVersion.CURRENT),
-             serializer, length);
+        this(params, payload, offset, serializer.getProtocolVersion(), serializer, length);
     }
 
     // These methods handle the serialization/deserialization using the custom Bitcoin protocol.
@@ -135,7 +132,7 @@ public abstract class Message {
 
     /**
      * <p>To be called before any change of internal values including any setters. This ensures any cached byte array is
-     * removed.<p/>
+     * removed.</p>
      * <p>Child messages of this object(e.g. Transactions belonging to a Block) will not have their internal byte caches
      * invalidated unless they are also modified internally.</p>
      */
@@ -172,6 +169,17 @@ public abstract class Message {
     }
 
     /**
+     * Overrides the message serializer.
+     * @param serializer the new serializer
+     */
+    public void setSerializer(MessageSerializer serializer) {
+        if (!this.serializer.equals(serializer)) {
+            this.serializer = serializer;
+            unCache();
+        }
+    }
+
+    /**
      * Returns a copy of the array returned by {@link Message#unsafeBitcoinSerialize()}, which is safe to mutate.
      * If you need extra performance and can guarantee you won't write to the array, you can use the unsafe version.
      *
@@ -185,19 +193,20 @@ public abstract class Message {
     }
 
     /**
-     * Serialize this message to a byte array that conforms to the bitcoin wire protocol.
-     * <br/>
-     * This method may return the original byte array used to construct this message if the
-     * following conditions are met:
+     * <p>Serialize this message to a byte array that conforms to the bitcoin wire protocol.</p>
+     *
+     * <p>This method may return the original byte array used to construct this message if the
+     * following conditions are met:</p>
+     *
      * <ol>
      * <li>1) The message was parsed from a byte array with parseRetain = true</li>
      * <li>2) The message has not been modified</li>
      * <li>3) The array had an offset of 0 and no surplus bytes</li>
      * </ol>
      *
-     * If condition 3 is not met then an copy of the relevant portion of the array will be returned.
+     * <p>If condition 3 is not met then an copy of the relevant portion of the array will be returned.
      * Otherwise a full serialize will occur. For this reason you should only use this API if you can guarantee you
-     * will treat the resulting array as read only.
+     * will treat the resulting array as read only.</p>
      *
      * @return a byte array owned by this object, do NOT mutate it.
      */
@@ -326,10 +335,14 @@ public abstract class Message {
         }
     }
 
-    protected byte[] readBytes(int length) throws ProtocolException {
-        if (length > MAX_SIZE) {
+    private void checkReadLength(int length) throws ProtocolException {
+        if ((length > MAX_SIZE) || (cursor + length > payload.length)) {
             throw new ProtocolException("Claimed value length too large: " + length);
         }
+    }
+
+    protected byte[] readBytes(int length) throws ProtocolException {
+        checkReadLength(length);
         try {
             byte[] b = new byte[length];
             System.arraycopy(payload, cursor, b, 0, length);
@@ -339,7 +352,12 @@ public abstract class Message {
             throw new ProtocolException(e);
         }
     }
-    
+
+    protected byte readByte() throws ProtocolException {
+        checkReadLength(1);
+        return payload[cursor++];
+    }
+
     protected byte[] readByteArray() throws ProtocolException {
         long len = readVarInt();
         return readBytes((int)len);
@@ -347,7 +365,7 @@ public abstract class Message {
 
     protected String readStr() throws ProtocolException {
         long length = readVarInt();
-        return length == 0 ? "" : Utils.toString(readBytes((int) length), "UTF-8"); // optimization for empty strings
+        return length == 0 ? "" : new String(readBytes((int) length), StandardCharsets.UTF_8); // optimization for empty strings
     }
 
     protected Sha256Hash readHash() throws ProtocolException {
@@ -368,7 +386,7 @@ public abstract class Message {
     /**
      * Set the serializer for this message when deserialized by Java.
      */
-    private void readObject(java.io.ObjectInputStream in)
+    private void readObject(ObjectInputStream in)
         throws IOException, ClassNotFoundException {
         in.defaultReadObject();
         if (null != params) {

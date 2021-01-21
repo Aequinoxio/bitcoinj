@@ -24,8 +24,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import static org.bitcoinj.core.Utils.*;
 
@@ -46,6 +48,7 @@ public class BitcoinSerializer extends MessageSerializer {
     private static final int COMMAND_LEN = 12;
 
     private final NetworkParameters params;
+    private final int protocolVersion;
     private final boolean parseRetain;
 
     private static final Map<Class<? extends Message>, String> names = new HashMap<>();
@@ -77,12 +80,35 @@ public class BitcoinSerializer extends MessageSerializer {
     /**
      * Constructs a BitcoinSerializer with the given behavior.
      *
-     * @param params           networkParams used to create Messages instances and termining packetMagic
+     * @param params           networkParams used to create Messages instances and determining packetMagic
      * @param parseRetain      retain the backing byte array of a message for fast reserialization.
      */
     public BitcoinSerializer(NetworkParameters params, boolean parseRetain) {
+        this(params, params.getProtocolVersionNum(NetworkParameters.ProtocolVersion.CURRENT), parseRetain);
+    }
+
+    /**
+     * Constructs a BitcoinSerializer with the given behavior.
+     *
+     * @param params           networkParams used to create Messages instances and determining packetMagic
+     * @param protocolVersion  the protocol version to use
+     * @param parseRetain      retain the backing byte array of a message for fast reserialization.
+     */
+    public BitcoinSerializer(NetworkParameters params, int protocolVersion, boolean parseRetain) {
         this.params = params;
+        this.protocolVersion = protocolVersion;
         this.parseRetain = parseRetain;
+    }
+
+    @Override
+    public BitcoinSerializer withProtocolVersion(int protocolVersion) {
+        return protocolVersion == this.protocolVersion ?
+                this : new BitcoinSerializer(params, protocolVersion, parseRetain);
+    }
+
+    @Override
+    public int getProtocolVersion() {
+        return protocolVersion;
     }
 
     /**
@@ -305,12 +331,9 @@ public class BitcoinSerializer extends MessageSerializer {
      * serialization format support.
      */
     @Override
-    public Transaction makeTransaction(byte[] payloadBytes, int offset,
-        int length, byte[] hash) throws ProtocolException {
-        Transaction tx = new Transaction(params, payloadBytes, offset, null, this, length);
-        if (hash != null)
-            tx.setHash(Sha256Hash.wrapReversed(hash));
-        return tx;
+    public Transaction makeTransaction(byte[] payloadBytes, int offset, int length, byte[] hashFromHeader)
+            throws ProtocolException {
+        return new Transaction(params, payloadBytes, offset, null, this, length, hashFromHeader);
     }
 
     @Override
@@ -364,7 +387,7 @@ public class BitcoinSerializer extends MessageSerializer {
             for (; header[cursor] != 0 && cursor < COMMAND_LEN; cursor++) ;
             byte[] commandBytes = new byte[cursor];
             System.arraycopy(header, 0, commandBytes, 0, cursor);
-            command = Utils.toString(commandBytes, "US-ASCII");
+            command = new String(commandBytes, StandardCharsets.US_ASCII);
             cursor = COMMAND_LEN;
 
             size = (int) readUint32(header, cursor);
@@ -379,5 +402,20 @@ public class BitcoinSerializer extends MessageSerializer {
             System.arraycopy(header, cursor, checksum, 0, 4);
             cursor += 4;
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || !(o instanceof BitcoinSerializer)) return false;
+        BitcoinSerializer other = (BitcoinSerializer) o;
+        return Objects.equals(params, other.params) &&
+                protocolVersion == other.protocolVersion &&
+                parseRetain == other.parseRetain;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(params, protocolVersion, parseRetain);
     }
 }

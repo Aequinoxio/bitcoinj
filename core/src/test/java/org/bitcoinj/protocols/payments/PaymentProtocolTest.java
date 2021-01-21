@@ -16,7 +16,13 @@
 
 package org.bitcoinj.protocols.payments;
 
-import org.bitcoinj.core.*;
+import org.bitcoinj.core.Address;
+import org.bitcoinj.core.Coin;
+import org.bitcoinj.core.ECKey;
+import org.bitcoinj.core.LegacyAddress;
+import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.Transaction;
+import org.bitcoinj.core.Utils;
 import org.bitcoinj.crypto.X509Utils;
 import org.bitcoinj.params.TestNet3Params;
 import org.bitcoinj.params.UnitTestParams;
@@ -41,11 +47,12 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class PaymentProtocolTest {
+    private static final NetworkParameters UNITTEST = UnitTestParams.get();
+    private static final NetworkParameters TESTNET = TestNet3Params.get();
 
     // static test data
-    private static final NetworkParameters NETWORK_PARAMS = UnitTestParams.get();
     private static final Coin AMOUNT = Coin.SATOSHI;
-    private static final Address TO_ADDRESS = new ECKey().toAddress(NETWORK_PARAMS);
+    private static final Address TO_ADDRESS = LegacyAddress.fromKey(UNITTEST, new ECKey());
     private static final String MEMO = "memo";
     private static final String PAYMENT_URL = "https://example.com";
     private static final byte[] MERCHANT_DATA = { 0, 1, 2 };
@@ -93,7 +100,7 @@ public class PaymentProtocolTest {
 
     private Protos.PaymentRequest minimalPaymentRequest() {
         Protos.PaymentDetails.Builder paymentDetails = Protos.PaymentDetails.newBuilder();
-        paymentDetails.setTime(System.currentTimeMillis());
+        paymentDetails.setTime(Utils.currentTimeSeconds());
         Protos.PaymentRequest.Builder paymentRequest = Protos.PaymentRequest.newBuilder();
         paymentRequest.setSerializedPaymentDetails(paymentDetails.build().toByteString());
         return paymentRequest.build();
@@ -102,7 +109,7 @@ public class PaymentProtocolTest {
     @Test
     public void testPaymentRequest() throws Exception {
         // Create
-        PaymentRequest paymentRequest = PaymentProtocol.createPaymentRequest(TestNet3Params.get(), AMOUNT, TO_ADDRESS, MEMO,
+        PaymentRequest paymentRequest = PaymentProtocol.createPaymentRequest(TESTNET, AMOUNT, TO_ADDRESS, MEMO,
                 PAYMENT_URL, MERCHANT_DATA).build();
         byte[] paymentRequestBytes = paymentRequest.toByteArray();
 
@@ -122,16 +129,16 @@ public class PaymentProtocolTest {
     public void testPaymentMessage() throws Exception {
         // Create
         List<Transaction> transactions = new LinkedList<>();
-        transactions.add(FakeTxBuilder.createFakeTx(NETWORK_PARAMS, AMOUNT, TO_ADDRESS));
+        transactions.add(FakeTxBuilder.createFakeTx(UNITTEST, AMOUNT, TO_ADDRESS));
         Coin refundAmount = Coin.SATOSHI;
-        Address refundAddress = new ECKey().toAddress(NETWORK_PARAMS);
+        Address refundAddress = LegacyAddress.fromKey(UNITTEST, new ECKey());
         Payment payment = PaymentProtocol.createPaymentMessage(transactions, refundAmount, refundAddress, MEMO,
                 MERCHANT_DATA);
         byte[] paymentBytes = payment.toByteArray();
 
         // Parse
         Payment parsedPayment = Payment.parseFrom(paymentBytes);
-        List<Transaction> parsedTransactions = PaymentProtocol.parseTransactionsFromPaymentMessage(NETWORK_PARAMS,
+        List<Transaction> parsedTransactions = PaymentProtocol.parseTransactionsFromPaymentMessage(UNITTEST,
                 parsedPayment);
         assertEquals(transactions, parsedTransactions);
         assertEquals(1, parsedPayment.getRefundToCount());

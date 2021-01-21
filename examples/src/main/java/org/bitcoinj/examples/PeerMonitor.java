@@ -25,7 +25,6 @@ import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.net.discovery.DnsDiscovery;
 import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.utils.BriefLogFormatter;
-import com.google.common.collect.Lists;
 
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
@@ -37,6 +36,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -49,7 +49,7 @@ public class PeerMonitor {
     private PeerTableModel peerTableModel;
     private PeerTableRenderer peerTableRenderer;
 
-    private final HashMap<Peer, String> reverseDnsLookups = new HashMap<Peer, String>();
+    private final HashMap<Peer, String> reverseDnsLookups = new HashMap<>();
 
     public static void main(String[] args) throws Exception {
         BriefLogFormatter.init();
@@ -68,46 +68,32 @@ public class PeerMonitor {
         peerGroup.setUserAgent("PeerMonitor", "1.0");
         peerGroup.setMaxConnections(4);
         peerGroup.addPeerDiscovery(new DnsDiscovery(params));
-        peerGroup.addConnectedEventListener(new PeerConnectedEventListener() {
-            @Override
-            public void onPeerConnected(final Peer peer, int peerCount) {
-                refreshUI();
-                lookupReverseDNS(peer);
-            }
+        peerGroup.addConnectedEventListener((peer, peerCount) -> {
+            refreshUI();
+            lookupReverseDNS(peer);
         });
-        peerGroup.addDisconnectedEventListener(new PeerDisconnectedEventListener() {
-            @Override
-            public void onPeerDisconnected(final Peer peer, int peerCount) {
-                refreshUI();
-                synchronized (reverseDnsLookups) {
-                    reverseDnsLookups.remove(peer);
-                }
+        peerGroup.addDisconnectedEventListener((peer, peerCount) -> {
+            refreshUI();
+            synchronized (reverseDnsLookups) {
+                reverseDnsLookups.remove(peer);
             }
         });
     }
 
     private void lookupReverseDNS(final Peer peer) {
-        new Thread() {
-            @Override
-            public void run() {
-                // This can take a looooong time.
-                String reverseDns = peer.getAddress().getAddr().getCanonicalHostName();
-                synchronized (reverseDnsLookups) {
-                    reverseDnsLookups.put(peer, reverseDns);
-                }
-                refreshUI();
+        new Thread(() -> {
+            // This can take a looooong time.
+            String reverseDns = peer.getAddress().getAddr().getCanonicalHostName();
+            synchronized (reverseDnsLookups) {
+                reverseDnsLookups.put(peer, reverseDns);
             }
-        }.start();
+            refreshUI();
+        }).start();
     }
 
     private void refreshUI() {
         // Tell the Swing UI thread to redraw the peers table.
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                peerTableModel.updateFromPeerGroup();
-            }
-        });
+        SwingUtilities.invokeLater(() -> peerTableModel.updateFromPeerGroup());
     }
 
     private void setupGUI() {
@@ -126,12 +112,7 @@ public class PeerMonitor {
         JPanel panel = new JPanel();
         JLabel instructions = new JLabel("Number of peers to connect to: ");
         final SpinnerNumberModel spinnerModel = new SpinnerNumberModel(4, 0, 100, 1);
-        spinnerModel.addChangeListener(new ChangeListener() {
-            @Override
-            public void stateChanged(ChangeEvent changeEvent) {
-                peerGroup.setMaxConnections(spinnerModel.getNumber().intValue());
-            }
-        });
+        spinnerModel.addChangeListener(changeEvent -> peerGroup.setMaxConnections(spinnerModel.getNumber().intValue()));
         JSpinner numPeersSpinner = new JSpinner(spinnerModel);
         panel.add(instructions);
         panel.add(numPeersSpinner);
@@ -153,12 +134,7 @@ public class PeerMonitor {
         window.setVisible(true);
 
         // Refresh the UI every half second to get the latest ping times. The event handler runs in the UI thread.
-        new Timer(1000, new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent actionEvent) {
-                peerTableModel.updateFromPeerGroup();
-            }
-        }).start();
+        new Timer(1000, actionEvent -> peerTableModel.updateFromPeerGroup()).start();
     }
 
     private class PeerTableModel extends AbstractTableModel {
@@ -169,8 +145,8 @@ public class PeerMonitor {
         public static final int PING_TIME = 4;
         public static final int LAST_PING_TIME = 5;
 
-        public List<Peer> connectedPeers = Lists.newArrayList();
-        public List<Peer> pendingPeers = Lists.newArrayList();
+        public List<Peer> connectedPeers = new ArrayList<>();
+        public List<Peer> pendingPeers = new ArrayList<>();
 
         public void updateFromPeerGroup() {
             connectedPeers = peerGroup.getConnectedPeers();

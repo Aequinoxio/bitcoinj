@@ -29,6 +29,7 @@ import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.WalletTransaction;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,13 +53,21 @@ public abstract class AbstractFullPrunedBlockChainTest {
 
     private static final Logger log = LoggerFactory.getLogger(AbstractFullPrunedBlockChainTest.class);
 
-    protected static final NetworkParameters PARAMS = new UnitTestParams() {
-        @Override public int getInterval() {
-            return 10000;
-        }
-    };
+    protected static NetworkParameters PARAMS;
+    private static final NetworkParameters MAINNET = MainNetParams.get();
+
     protected FullPrunedBlockChain chain;
     protected FullPrunedBlockStore store;
+
+    @BeforeClass
+    public static void setUpClass() throws Exception {
+        Utils.resetMocking();
+        PARAMS = new UnitTestParams() {
+            @Override public int getInterval() {
+                return 10000;
+            }
+        };
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -174,15 +183,15 @@ public abstract class AbstractFullPrunedBlockChainTest {
         // Build some blocks on genesis block to create a spendable output
         Block rollingBlock = PARAMS.getGenesisBlock().createNextBlockWithCoinbase(Block.BLOCK_VERSION_GENESIS, outKey.getPubKey(), height++);
         chain.add(rollingBlock);
-        TransactionOutPoint spendableOutput = new TransactionOutPoint(PARAMS, 0, rollingBlock.getTransactions().get(0).getHash());
+        TransactionOutPoint spendableOutput = new TransactionOutPoint(PARAMS, 0, rollingBlock.getTransactions().get(0).getTxId());
         byte[] spendableOutputScriptPubKey = rollingBlock.getTransactions().get(0).getOutputs().get(0).getScriptBytes();
         for (int i = 1; i < PARAMS.getSpendableCoinbaseDepth(); i++) {
             rollingBlock = rollingBlock.createNextBlockWithCoinbase(Block.BLOCK_VERSION_GENESIS, outKey.getPubKey(), height++);
             chain.add(rollingBlock);
         }
         
-        WeakReference<UTXO> out = new WeakReference<UTXO>
-                                       (store.getTransactionOutput(spendableOutput.getHash(), spendableOutput.getIndex()));
+        WeakReference<UTXO> out = new WeakReference<>
+                (store.getTransactionOutput(spendableOutput.getHash(), spendableOutput.getIndex()));
         rollingBlock = rollingBlock.createNextBlock(null);
         
         Transaction t = new Transaction(PARAMS);
@@ -219,12 +228,11 @@ public abstract class AbstractFullPrunedBlockChainTest {
     
     @Test
     public void testFirst100KBlocks() throws Exception {
-        NetworkParameters params = MainNetParams.get();
-        Context context = new Context(params);
+        Context context = new Context(MAINNET);
         File blockFile = new File(getClass().getResource("first-100k-blocks.dat").getFile());
-        BlockFileLoader loader = new BlockFileLoader(params, Arrays.asList(blockFile));
+        BlockFileLoader loader = new BlockFileLoader(MAINNET, Arrays.asList(blockFile));
         
-        store = createStore(params, 10);
+        store = createStore(MAINNET, 10);
         resetStore(store);
         chain = new FullPrunedBlockChain(context, store);
         for (Block block : loader)
@@ -249,7 +257,7 @@ public abstract class AbstractFullPrunedBlockChainTest {
         Block rollingBlock = PARAMS.getGenesisBlock().createNextBlockWithCoinbase(Block.BLOCK_VERSION_GENESIS, outKey.getPubKey(), height++);
         chain.add(rollingBlock);
         Transaction transaction = rollingBlock.getTransactions().get(0);
-        TransactionOutPoint spendableOutput = new TransactionOutPoint(PARAMS, 0, transaction.getHash());
+        TransactionOutPoint spendableOutput = new TransactionOutPoint(PARAMS, 0, transaction.getTxId());
         byte[] spendableOutputScriptPubKey = transaction.getOutputs().get(0).getScriptBytes();
         for (int i = 1; i < PARAMS.getSpendableCoinbaseDepth(); i++) {
             rollingBlock = rollingBlock.createNextBlockWithCoinbase(Block.BLOCK_VERSION_GENESIS, outKey.getPubKey(), height++);
@@ -260,7 +268,7 @@ public abstract class AbstractFullPrunedBlockChainTest {
         // Create bitcoin spend of 1 BTC.
         ECKey toKey = new ECKey();
         Coin amount = Coin.valueOf(100000000);
-        Address address = new Address(PARAMS, toKey.getPubKeyHash());
+        Address address = LegacyAddress.fromKey(PARAMS, toKey);
         Coin totalAmount = Coin.ZERO;
 
         Transaction t = new Transaction(PARAMS);
@@ -271,7 +279,7 @@ public abstract class AbstractFullPrunedBlockChainTest {
         chain.add(rollingBlock);
         totalAmount = totalAmount.add(amount);
 
-        List<UTXO> outputs = store.getOpenTransactionOutputs(Lists.newArrayList(address));
+        List<UTXO> outputs = store.getOpenTransactionOutputs(Lists.newArrayList(toKey));
         assertNotNull(outputs);
         assertEquals("Wrong Number of Outputs", 1, outputs.size());
         UTXO output = outputs.get(0);
@@ -300,7 +308,7 @@ public abstract class AbstractFullPrunedBlockChainTest {
         Block rollingBlock = PARAMS.getGenesisBlock().createNextBlockWithCoinbase(Block.BLOCK_VERSION_GENESIS, outKey.getPubKey(), height++);
         chain.add(rollingBlock);
         Transaction transaction = rollingBlock.getTransactions().get(0);
-        TransactionOutPoint spendableOutput = new TransactionOutPoint(PARAMS, 0, transaction.getHash());
+        TransactionOutPoint spendableOutput = new TransactionOutPoint(PARAMS, 0, transaction.getTxId());
         byte[] spendableOutputScriptPubKey = transaction.getOutputs().get(0).getScriptBytes();
         for (int i = 1; i < PARAMS.getSpendableCoinbaseDepth(); i++) {
             rollingBlock = rollingBlock.createNextBlockWithCoinbase(Block.BLOCK_VERSION_GENESIS, outKey.getPubKey(), height++);
@@ -309,7 +317,7 @@ public abstract class AbstractFullPrunedBlockChainTest {
         rollingBlock = rollingBlock.createNextBlock(null);
 
         // Create 1 BTC spend to a key in this wallet (to ourselves).
-        Wallet wallet = new Wallet(PARAMS);
+        Wallet wallet = Wallet.createDeterministic(PARAMS, Script.ScriptType.P2PKH);
         assertEquals("Available balance is incorrect", Coin.ZERO, wallet.getBalance(Wallet.BalanceType.AVAILABLE));
         assertEquals("Estimated balance is incorrect", Coin.ZERO, wallet.getBalance(Wallet.BalanceType.ESTIMATED));
 
@@ -327,7 +335,7 @@ public abstract class AbstractFullPrunedBlockChainTest {
         // Create another spend of 1/2 the value of BTC we have available using the wallet (store coin selector).
         ECKey toKey2 = new ECKey();
         Coin amount2 = amount.divide(2);
-        Address address2 = new Address(PARAMS, toKey2.getPubKeyHash());
+        Address address2 = LegacyAddress.fromKey(PARAMS, toKey2);
         SendRequest req = SendRequest.to(address2, amount2);
         wallet.completeTx(req);
         wallet.commitTx(req.tx);
@@ -340,7 +348,7 @@ public abstract class AbstractFullPrunedBlockChainTest {
             totalPendingTxAmount = totalPendingTxAmount.add(tx.getValueSentToMe(wallet));
         }
 
-        // The availbale balance should be the 0 (as we spent the 1 BTC that's pending) and estimated should be 1/2 - fee BTC
+        // The available balance should be the 0 (as we spent the 1 BTC that's pending) and estimated should be 1/2 - fee BTC
         assertEquals("Available balance is incorrect", Coin.ZERO, wallet.getBalance(Wallet.BalanceType.AVAILABLE));
         assertEquals("Estimated balance is incorrect", amount2.subtract(fee), wallet.getBalance(Wallet.BalanceType.ESTIMATED));
         assertEquals("Pending tx amount is incorrect", amount2.subtract(fee), totalPendingTxAmount);

@@ -22,7 +22,7 @@ import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.concurrent.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.spongycastle.crypto.params.KeyParameter;
+import org.bouncycastle.crypto.params.KeyParameter;
 
 import javax.annotation.*;
 import java.time.Duration;
@@ -44,7 +44,7 @@ public class KeyDerivationTasks {
     private volatile int timeTakenMsec = -1;
 
     public KeyDerivationTasks(KeyCrypterScrypt scrypt, String password, @Nullable Duration targetTime) {
-        keyDerivationTask = new Task<KeyParameter>() {
+        keyDerivationTask = new Task<>() {
             @Override
             protected KeyParameter call() throws Exception {
                 long start = System.currentTimeMillis();
@@ -63,7 +63,7 @@ public class KeyDerivationTasks {
 
         // And the fake progress meter ... if the vals were calculated correctly progress bar should reach 100%
         // a brief moment after the keys were derived successfully.
-        progressTask = new Task<Void>() {
+        progressTask = new Task<>() {
             private KeyParameter aesKey;
 
             @Override

@@ -17,11 +17,14 @@
 package org.bitcoinj.net.discovery;
 
 import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.Utils;
 
 import javax.annotation.Nullable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -81,10 +84,10 @@ public class SeedPeers implements PeerDiscovery {
     }
 
     /**
-     * Returns an array containing all the Bitcoin nodes within the list.
+     * Returns all the Bitcoin nodes within the list.
      */
     @Override
-    public InetSocketAddress[] getPeers(long services, long timeoutValue, TimeUnit timeoutUnit) throws PeerDiscoveryException {
+    public List<InetSocketAddress> getPeers(long services, long timeoutValue, TimeUnit timeoutUnit) throws PeerDiscoveryException {
         if (services != 0)
             throw new PeerDiscoveryException("Pre-determined peers cannot be filtered by services: " + services);
         try {
@@ -94,20 +97,17 @@ public class SeedPeers implements PeerDiscovery {
         }
     }
 
-    private InetSocketAddress[] allPeers() throws UnknownHostException {
-        InetSocketAddress[] addresses = new InetSocketAddress[seedAddrs.length];
-        for (int i = 0; i < seedAddrs.length; ++i) {
-            addresses[i] = new InetSocketAddress(convertAddress(seedAddrs[i]), params.getPort());
+    private List<InetSocketAddress> allPeers() throws UnknownHostException {
+        List<InetSocketAddress> addresses = new ArrayList<>(seedAddrs.length);
+        for (int seedAddr : seedAddrs) {
+            addresses.add(new InetSocketAddress(convertAddress(seedAddr), params.getPort()));
         }
         return addresses;
     }
 
     private InetAddress convertAddress(int seed) throws UnknownHostException {
         byte[] v4addr = new byte[4];
-        v4addr[0] = (byte) (0xFF & (seed));
-        v4addr[1] = (byte) (0xFF & (seed >> 8));
-        v4addr[2] = (byte) (0xFF & (seed >> 16));
-        v4addr[3] = (byte) (0xFF & (seed >> 24));
+        Utils.uint32ToByteArrayLE(seed, v4addr, 0);
         return InetAddress.getByAddress(v4addr);
     }
 

@@ -20,25 +20,33 @@ import org.bitcoinj.core.BlockChain;
 import org.bitcoinj.core.Context;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.StoredBlock;
+import org.bitcoinj.core.Utils;
 import org.bitcoinj.params.UnitTestParams;
 import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.store.MemoryBlockStore;
 import org.bitcoinj.testing.FakeTxBuilder;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Before;
 
 public class VersionTallyTest {
-    private static final NetworkParameters PARAMS = UnitTestParams.get();
+    private static NetworkParameters UNITTEST;
 
     public VersionTallyTest() {
+    }
+
+    @BeforeClass
+    public static void setUpClass() throws Exception {
+        Utils.resetMocking();
+        UNITTEST = UnitTestParams.get();
     }
 
     @Before
     public void setUp() throws Exception {
         BriefLogFormatter.initVerbose();
-        Context context = new Context(PARAMS);
+        Context context = new Context(UNITTEST);
     }
 
     /**
@@ -46,12 +54,12 @@ public class VersionTallyTest {
      */
     @Test
     public void testNullWhileEmpty() {
-        VersionTally instance = new VersionTally(PARAMS);
-        for (int i = 0; i < PARAMS.getMajorityWindow(); i++) {
+        VersionTally instance = new VersionTally(UNITTEST);
+        for (int i = 0; i < UNITTEST.getMajorityWindow(); i++) {
             assertNull(instance.getCountAtOrAbove(1));
             instance.add(1);
         }
-        assertEquals(PARAMS.getMajorityWindow(), instance.getCountAtOrAbove(1).intValue());
+        assertEquals(UNITTEST.getMajorityWindow(), instance.getCountAtOrAbove(1).intValue());
     }
 
     /**
@@ -59,8 +67,8 @@ public class VersionTallyTest {
      */
     @Test
     public void testSize() {
-        VersionTally instance = new VersionTally(PARAMS);
-        assertEquals(PARAMS.getMajorityWindow(), instance.size());
+        VersionTally instance = new VersionTally(UNITTEST);
+        assertEquals(UNITTEST.getMajorityWindow(), instance.size());
     }
 
     /**
@@ -68,46 +76,46 @@ public class VersionTallyTest {
      */
     @Test
     public void testVersionCounts() {
-        VersionTally instance = new VersionTally(PARAMS);
+        VersionTally instance = new VersionTally(UNITTEST);
 
         // Fill the tally with 1s
-        for (int i = 0; i < PARAMS.getMajorityWindow(); i++) {
+        for (int i = 0; i < UNITTEST.getMajorityWindow(); i++) {
             assertNull(instance.getCountAtOrAbove(1));
             instance.add(1);
         }
-        assertEquals(PARAMS.getMajorityWindow(), instance.getCountAtOrAbove(1).intValue());
+        assertEquals(UNITTEST.getMajorityWindow(), instance.getCountAtOrAbove(1).intValue());
 
         // Check the count updates as we replace with 2s
-        for (int i = 0; i < PARAMS.getMajorityWindow(); i++) {
+        for (int i = 0; i < UNITTEST.getMajorityWindow(); i++) {
             assertEquals(i, instance.getCountAtOrAbove(2).intValue());
             instance.add(2);
         }
  
         // Inject a rogue 1
         instance.add(1);
-        assertEquals(PARAMS.getMajorityWindow() - 1, instance.getCountAtOrAbove(2).intValue());
+        assertEquals(UNITTEST.getMajorityWindow() - 1, instance.getCountAtOrAbove(2).intValue());
 
         // Check we accept high values as well
         instance.add(10);
-        assertEquals(PARAMS.getMajorityWindow() - 1, instance.getCountAtOrAbove(2).intValue());
+        assertEquals(UNITTEST.getMajorityWindow() - 1, instance.getCountAtOrAbove(2).intValue());
     }
 
     @Test
     public void testInitialize() throws BlockStoreException {
-        final BlockStore blockStore = new MemoryBlockStore(PARAMS);
-        final BlockChain chain = new BlockChain(PARAMS, blockStore);
+        final BlockStore blockStore = new MemoryBlockStore(UNITTEST);
+        final BlockChain chain = new BlockChain(UNITTEST, blockStore);
 
         // Build a historical chain of version 2 blocks
         long timeSeconds = 1231006505;
         StoredBlock chainHead = null;
-        for (int height = 0; height < PARAMS.getMajorityWindow(); height++) {
+        for (int height = 0; height < UNITTEST.getMajorityWindow(); height++) {
             chainHead = FakeTxBuilder.createFakeBlock(blockStore, 2, timeSeconds, height).storedBlock;
             assertEquals(2, chainHead.getHeader().getVersion());
             timeSeconds += 60;
         }
 
-        VersionTally instance = new VersionTally(PARAMS);
+        VersionTally instance = new VersionTally(UNITTEST);
         instance.initialize(blockStore, chainHead);
-        assertEquals(PARAMS.getMajorityWindow(), instance.getCountAtOrAbove(2).intValue());
+        assertEquals(UNITTEST.getMajorityWindow(), instance.getCountAtOrAbove(2).intValue());
     }
 }
